@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>A2UI · Interactive Stream Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --panel: #15151a;
+    --panel-2: #1c1c22;
+    --border: #2a2a33;
+    --text: #e6e6ea;
+    --muted: #71717a;
+    --dim: #4a4a55;
+    --accent: #06b6d4;
+    --accent-dim: rgba(6, 182, 212, 0.12);
+    --accent-soft: rgba(6, 182, 212, 0.4);
+    --warn: #f59e0b;
+    --good: #10b981;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Geist', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+  }
+
+  /* -------- Header -------- */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .brand h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .brand .ver {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .brand .sub {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .controls select,
+  .controls button {
+    font-family: var(--sans);
+    font-size: 13px;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 7px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 120ms ease;
+  }
+  .controls button:hover:not(:disabled) {
+    border-color: var(--accent-soft);
+    color: var(--accent);
+  }
+  .controls button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .controls button.primary {
+    background: var(--accent);
+    color: #001017;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .controls button.primary:hover:not(:disabled) {
+    background: #0891b2;
+    color: white;
+  }
+  .controls .speed-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: 8px;
+    margin-right: -4px;
+  }
+
+  /* -------- Main split -------- */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    overflow: hidden;
+  }
+  .pane {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .pane + .pane {
+    border-left: 1px solid var(--border);
+  }
+  .pane-header {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel);
+  }
+  .pane-header .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .pane-header .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .pane-body {
+    flex: 1;
+    overflow: auto;
+    padding: 16px 20px;
+  }
+
+  /* -------- JSONL stream -------- */
+  .stream {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .msg {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.55;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--dim);
+    white-space: pre-wrap;
+    word-break: break-word;
+    transition: all 250ms ease;
+    position: relative;
+  }
+  .msg.processed {
+    color: var(--text);
+    background: var(--panel-2);
+  }
+  .msg.current {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--text);
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.08);
+  }
+  .msg .num {
+    color: var(--muted);
+    font-weight: 700;
+    margin-right: 12px;
+    user-select: none;
+  }
+  .msg.processed .num { color: var(--accent); }
+  .msg .key { color: #c084fc; }
+  .msg .str { color: #86efac; }
+  .msg .num-val { color: #fcd34d; }
+  .msg .bool { color: #f97316; }
+  .msg .punct { color: var(--muted); }
+
+  /* -------- Rendered surface -------- */
+  .surface {
+    background: white;
+    color: #1a1a1a;
+    border-radius: 8px;
+    padding: 24px;
+    min-height: 200px;
+    font-family: var(--sans);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+  .surface .placeholder {
+    color: #94a3b8;
+    text-align: center;
+    padding: 40px 20px;
+    font-style: italic;
+  }
+
+  /* A2UI rendered components — these are the client-side widget mappings */
+  .a2ui-text { font-size: 15px; line-height: 1.5; }
+  .a2ui-text.h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .a2ui-text.h2 { font-size: 22px; font-weight: 700; }
+  .a2ui-text.h3 { font-size: 17px; font-weight: 600; }
+  .a2ui-text.body1 { font-size: 15px; }
+  .a2ui-text.body2 { font-size: 13px; color: #475569; }
+  .a2ui-column { display: flex; flex-direction: column; gap: 8px; }
+  .a2ui-column.start { align-items: flex-start; }
+  .a2ui-column.center { align-items: center; }
+  .a2ui-column.end { align-items: flex-end; }
+  .a2ui-row { display: flex; flex-direction: row; gap: 12px; align-items: center; }
+  .a2ui-row.start { align-items: flex-start; }
+  .a2ui-row.center { align-items: center; }
+  .a2ui-row.end { align-items: flex-end; }
+  .a2ui-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    background: #fafbfc;
+  }
+  .a2ui-image {
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    background: #e2e8f0;
+  }
+  .a2ui-button {
+    background: #0f172a;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .a2ui-button:hover { background: #1e293b; }
+  .a2ui-unknown {
+    border: 1px dashed #cbd5e1;
+    color: #94a3b8;
+    padding: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  /* -------- State panel below surface -------- */
+  .state-panel {
+    margin-top: 16px;
+    border-top: 1px dashed var(--border);
+    padding-top: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .state-panel .section {
+    margin-bottom: 10px;
+  }
+  .state-panel .section-title {
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+    font-size: 10px;
+  }
+  .state-panel pre {
+    margin: 0;
+    color: var(--text);
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+
+  /* -------- Footer / status bar -------- */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 8px 24px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel);
+  }
+  footer .stat .v {
+    color: var(--text);
+    font-weight: 500;
+  }
+  footer .stat .v.ready { color: var(--good); }
+  footer .stat .v.waiting { color: var(--warn); }
+  footer .spacer { flex: 1; }
+  footer a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  footer a:hover { text-decoration: underline; }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <h1>A2UI</h1>
+      <span class="ver">v0.8 · interactive demo</span>
+      <span class="sub">step through a JSONL stream and watch the UI build</span>
+    </div>
+    <div class="controls">
+      <select id="example-select">
+        <option value="hello">Hello World</option>
+        <option value="profile">Profile Card</option>
+        <option value="streaming">Live Data Binding</option>
+      </select>
+      <button id="reset-btn">↻ Reset</button>
+      <button id="step-btn" class="primary">Step ›</button>
+      <button id="play-btn">▶ Play</button>
+      <span class="speed-label">delay</span>
+      <select id="speed-select">
+        <option value="1500">slow (1.5s)</option>
+        <option value="800" selected>normal (0.8s)</option>
+        <option value="300">fast (0.3s)</option>
+      </select>
+    </div>
+  </header>
+
+  <main>
+    <section class="pane">
+      <div class="pane-header">
+        <span class="label">JSONL Stream <span style="color:var(--dim)">(server → client)</span></span>
+        <span class="meta" id="stream-meta">0 / 0 messages</span>
+      </div>
+      <div class="pane-body">
+        <div class="stream" id="stream"></div>
+      </div>
+    </section>
+
+    <section class="pane">
+      <div class="pane-header">
+        <span class="label">Rendered Surface <span style="color:var(--dim)">(native widgets)</span></span>
+        <span class="meta" id="render-meta">not ready</span>
+      </div>
+      <div class="pane-body">
+        <div class="surface" id="surface">
+          <div class="placeholder">Waiting for beginRendering signal…</div>
+        </div>
+        <div class="state-panel">
+          <div class="section">
+            <div class="section-title">Component Buffer</div>
+            <pre id="buffer-display">{}</pre>
+          </div>
+          <div class="section">
+            <div class="section-title">Data Model</div>
+            <pre id="data-display">{}</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="stat">buffered: <span class="v" id="stat-buffered">0</span></span>
+    <span class="stat">data keys: <span class="v" id="stat-data">0</span></span>
+    <span class="stat">render state: <span class="v waiting" id="stat-ready">waiting</span></span>
+    <span class="stat">root: <span class="v" id="stat-root">—</span></span>
+    <span class="spacer"></span>
+    <span>spec: <a href="https://a2ui.org/specification/v0.8-a2ui/" target="_blank">a2ui.org/specification/v0.8-a2ui</a></span>
+  </footer>
+
+</div>
+
+<script>
+/* ============================================================================
+ * A2UI minimal client renderer — pedagogical implementation
+ *
+ * Implements the v0.8 message types needed for the demos:
+ *   - surfaceUpdate     : adds component definitions to the buffer
+ *   - dataModelUpdate   : merges values into the data model (adjacency-list form)
+ *   - beginRendering    : signals client to build the tree from a root id
+ *
+ * Component catalog implemented (subset of v0.8 standard catalog):
+ *   Text, Column, Row, Card, Image, Button
+ *
+ * Spec reference: https://a2ui.org/specification/v0.8-a2ui/
+ * ============================================================================ */
+
+// ---------- Example streams ------------------------------------------------
+
+const EXAMPLES = {
+  hello: [
+    {"surfaceUpdate": {"components": [
+      {"id": "root", "component": {"Text": {"text": {"literalString": "Hello, World!"}}}}
+    ]}},
+    {"beginRendering": {"root": "root"}}
+  ],
+
+  profile: [
+    {"surfaceUpdate": {"components": [{"id": "root", "component": {"Column": {"children": {"explicitList": ["profile_card"]}}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "profile_card", "component": {"Card": {"child": "card_content"}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "card_content", "component": {"Column": {"children": {"explicitList": ["header_row", "bio_text"]}}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "header_row", "component": {"Row": {"alignment": "center", "children": {"explicitList": ["avatar", "name_column"]}}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "avatar", "component": {"Image": {"url": {"literalString": "https://api.dicebear.com/7.x/shapes/svg?seed=a2ui"}}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "name_column", "component": {"Column": {"alignment": "start", "children": {"explicitList": ["name_text", "handle_text"]}}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "name_text", "component": {"Text": {"usageHint": "h3", "text": {"literalString": "A2A Fan"}}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "handle_text", "component": {"Text": {"usageHint": "body2", "text": {"literalString": "@a2a_fan"}}}}]}},
+    {"surfaceUpdate": {"components": [{"id": "bio_text", "component": {"Text": {"text": {"literalString": "Building beautiful apps from a single codebase."}}}}]}},
+    {"dataModelUpdate": {"contents": []}},
+    {"beginRendering": {"root": "root"}}
+  ],
+
+  streaming: [
+    {"surfaceUpdate": {"components": [
+      {"id": "root", "component": {"Column": {"alignment": "start", "children": {"explicitList": ["title", "status_label", "status_text", "progress_text"]}}}}
+    ]}},
+    {"surfaceUpdate": {"components": [
+      {"id": "title", "component": {"Text": {"usageHint": "h2", "text": {"literalString": "Agent task"}}}}
+    ]}},
+    {"surfaceUpdate": {"components": [
+      {"id": "status_label", "component": {"Text": {"usageHint": "body2", "text": {"literalString": "Status:"}}}}
+    ]}},
+    {"surfaceUpdate": {"components": [
+      {"id": "status_text", "component": {"Text": {"usageHint": "h3", "text": {"path": "/status", "literalString": "Initializing…"}}}}
+    ]}},
+    {"surfaceUpdate": {"components": [
+      {"id": "progress_text", "component": {"Text": {"usageHint": "body2", "text": {"path": "/progress"}}}}
+    ]}},
+    {"beginRendering": {"root": "root"}},
+    {"dataModelUpdate": {"contents": [
+      {"key": "status", "valueString": "Connecting to model…"},
+      {"key": "progress", "valueString": "step 1 of 4"}
+    ]}},
+    {"dataModelUpdate": {"contents": [
+      {"key": "status", "valueString": "Generating response…"},
+      {"key": "progress", "valueString": "step 2 of 4"}
+    ]}},
+    {"dataModelUpdate": {"contents": [
+      {"key": "status", "valueString": "Formatting output…"},
+      {"key": "progress", "valueString": "step 3 of 4"}
+    ]}},
+    {"dataModelUpdate": {"contents": [
+      {"key": "status", "valueString": "Done ✓"},
+      {"key": "progress", "valueString": "step 4 of 4 · complete"}
+    ]}}
+  ]
+};
+
+// ---------- Renderer state -------------------------------------------------
+
+let componentBuffer = {};   // id -> component definition
+let dataModel = {};         // arbitrary nested object, accessed by JSON-Pointer-ish paths
+let isReady = false;
+let rootId = null;
+
+let messages = [];          // current example's stream
+let cursor = 0;             // index of next message to process
+let playInterval = null;
+
+// ---------- Data model helpers --------------------------------------------
+
+function extractValue(entry) {
+  if ('valueString'  in entry) return entry.valueString;
+  if ('valueNumber'  in entry) return entry.valueNumber;
+  if ('valueBoolean' in entry) return entry.valueBoolean;
+  if ('valueArray'   in entry) return entry.valueArray;
+  if ('valueMap'     in entry) {
+    const m = {};
+    for (const sub of entry.valueMap) m[sub.key] = extractValue(sub);
+    return m;
+  }
+  return null;
+}
+
+function ensurePath(root, parts) {
+  let cur = root;
+  for (const p of parts) {
+    if (cur[p] == null || typeof cur[p] !== 'object') cur[p] = {};
+    cur = cur[p];
+  }
+  return cur;
+}
+
+function applyDataModelUpdate(update) {
+  const parts = (update.path || '').split('/').filter(Boolean);
+  const target = ensurePath(dataModel, parts);
+  for (const entry of update.contents || []) {
+    target[entry.key] = extractValue(entry);
+  }
+}
+
+function resolvePath(path) {
+  if (!path) return undefined;
+  const parts = path.split('/').filter(Boolean);
+  let cur = dataModel;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+
+function setPathValue(path, value) {
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length === 0) return;
+  const last = parts.pop();
+  const target = ensurePath(dataModel, parts);
+  if (target[last] === undefined) target[last] = value; // initialization shorthand
+}
+
+// Resolve a BoundValue: literal, path, or path+literal initialization
+function resolveBoundValue(bv) {
+  if (bv == null) return '';
+  // path + literal: initialize data model with literal, then bind
+  if ('path' in bv && ('literalString' in bv || 'literalNumber' in bv || 'literalBoolean' in bv)) {
+    const lit = bv.literalString ?? bv.literalNumber ?? bv.literalBoolean;
+    setPathValue(bv.path, lit);
+    const v = resolvePath(bv.path);
+    return v ?? lit;
+  }
+  if ('path' in bv) return resolvePath(bv.path) ?? '';
+  if ('literalString'  in bv) return bv.literalString;
+  if ('literalNumber'  in bv) return bv.literalNumber;
+  if ('literalBoolean' in bv) return bv.literalBoolean;
+  return '';
+}
+
+// ---------- Message processing --------------------------------------------
+
+function processMessage(msg) {
+  if (msg.surfaceUpdate) {
+    for (const c of msg.surfaceUpdate.components || []) {
+      componentBuffer[c.id] = c.component;
+    }
+  } else if (msg.dataModelUpdate) {
+    applyDataModelUpdate(msg.dataModelUpdate);
+  } else if (msg.beginRendering) {
+    rootId = msg.beginRendering.root;
+    isReady = true;
+  }
+}
+
+// ---------- Component renderers (the WidgetRegistry) ----------------------
+
+function renderComponent(id) {
+  const comp = componentBuffer[id];
+  if (!comp) return null;
+  const type = Object.keys(comp)[0];
+  const props = comp[type] || {};
+  switch (type) {
+    case 'Text':   return renderText(props);
+    case 'Column': return renderContainer(props, 'column');
+    case 'Row':    return renderContainer(props, 'row');
+    case 'Card':   return renderCard(props);
+    case 'Image':  return renderImage(props);
+    case 'Button': return renderButton(props);
+    default: {
+      const el = document.createElement('div');
+      el.className = 'a2ui-unknown';
+      el.textContent = `[unknown component: ${type}]`;
+      return el;
+    }
+  }
+}
+
+function renderText(props) {
+  const el = document.createElement('div');
+  const hint = props.usageHint || 'body1';
+  el.className = `a2ui-text ${hint}`;
+  el.textContent = String(resolveBoundValue(props.text) ?? '');
+  return el;
+}
+
+function renderContainer(props, kind) {
+  const el = document.createElement('div');
+  el.className = `a2ui-${kind} ${props.alignment || ''}`.trim();
+  const children = props.children || {};
+  if (children.explicitList) {
+    for (const childId of children.explicitList) {
+      const child = renderComponent(childId);
+      if (child) el.appendChild(child);
+    }
+  } else if (children.template) {
+    // template-based dynamic list — not implemented in this minimal demo
+    const hint = document.createElement('div');
+    hint.className = 'a2ui-unknown';
+    hint.textContent = '[template list — not implemented in this demo]';
+    el.appendChild(hint);
+  }
+  return el;
+}
+
+function renderCard(props) {
+  const el = document.createElement('div');
+  el.className = 'a2ui-card';
+  if (props.child) {
+    const child = renderComponent(props.child);
+    if (child) el.appendChild(child);
+  }
+  return el;
+}
+
+function renderImage(props) {
+  const el = document.createElement('img');
+  el.className = 'a2ui-image';
+  el.src = String(resolveBoundValue(props.url) ?? '');
+  el.alt = '';
+  return el;
+}
+
+function renderButton(props) {
+  const el = document.createElement('button');
+  el.className = 'a2ui-button';
+  if (props.child) {
+    const child = renderComponent(props.child);
+    if (child) el.appendChild(child);
+  } else if (props.label) {
+    el.textContent = String(resolveBoundValue(props.label) ?? '');
+  }
+  // In a real client, this would post a userAction back to the server via A2A.
+  el.addEventListener('click', () => {
+    const action = props.action || {};
+    console.log('[A2UI] userAction would be sent:', {
+      name: action.name,
+      sourceComponentId: '(unknown — would be tracked by the renderer)',
+      timestamp: new Date().toISOString(),
+      context: action.context
+    });
+    alert(`[demo] userAction "${action.name || 'unnamed'}" — see console for the payload that would be sent via A2A.`);
+  });
+  return el;
+}
+
+// ---------- Render driver --------------------------------------------------
+
+function renderSurface() {
+  const surface = document.getElementById('surface');
+  if (!isReady || !rootId) {
+    surface.innerHTML = '<div class="placeholder">Waiting for beginRendering signal…</div>';
+    return;
+  }
+  const tree = renderComponent(rootId);
+  surface.innerHTML = '';
+  if (tree) surface.appendChild(tree);
+  else surface.innerHTML = '<div class="placeholder">[root component not in buffer]</div>';
+}
+
+// ---------- JSONL pretty-print + highlight --------------------------------
+
+function syntaxHighlight(json) {
+  // Escape, then color JSON tokens. Done after JSON.stringify so it's safe.
+  return json
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"\s*:)/g, '<span class="key">$1</span>')
+    .replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(?!\s*:))/g, '<span class="str">$1</span>')
+    .replace(/\b(true|false)\b/g, '<span class="bool">$1</span>')
+    .replace(/(?<![\w-])(-?\d+(?:\.\d+)?)/g, '<span class="num-val">$1</span>');
+}
+
+function renderStream() {
+  const stream = document.getElementById('stream');
+  stream.innerHTML = '';
+  messages.forEach((msg, i) => {
+    const div = document.createElement('div');
+    div.className = 'msg';
+    if (i < cursor) div.classList.add('processed');
+    if (i === cursor - 1) div.classList.add('current');
+    const json = JSON.stringify(msg);
+    div.innerHTML = `<span class="num">${String(i + 1).padStart(2, '0')}</span>${syntaxHighlight(json)}`;
+    stream.appendChild(div);
+  });
+  // Auto-scroll the current line into view
+  const current = stream.querySelector('.msg.current');
+  if (current) current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ---------- Status / state displays ---------------------------------------
+
+function updateState() {
+  document.getElementById('buffer-display').textContent =
+    Object.keys(componentBuffer).length === 0
+      ? '{}'
+      : JSON.stringify(componentBuffer, null, 2);
+  document.getElementById('data-display').textContent =
+    Object.keys(dataModel).length === 0
+      ? '{}'
+      : JSON.stringify(dataModel, null, 2);
+
+  document.getElementById('stat-buffered').textContent = Object.keys(componentBuffer).length;
+  document.getElementById('stat-data').textContent = Object.keys(dataModel).length;
+  const ready = document.getElementById('stat-ready');
+  ready.textContent = isReady ? 'rendering' : 'waiting';
+  ready.className = 'v ' + (isReady ? 'ready' : 'waiting');
+  document.getElementById('stat-root').textContent = rootId || '—';
+
+  document.getElementById('stream-meta').textContent = `${cursor} / ${messages.length} messages`;
+  document.getElementById('render-meta').textContent =
+    isReady ? 'rendered' : 'waiting for beginRendering';
+}
+
+// ---------- Demo control ---------------------------------------------------
+
+function loadExample(name) {
+  stopPlay();
+  messages = JSON.parse(JSON.stringify(EXAMPLES[name]));
+  cursor = 0;
+  componentBuffer = {};
+  dataModel = {};
+  isReady = false;
+  rootId = null;
+  renderStream();
+  renderSurface();
+  updateState();
+  document.getElementById('step-btn').disabled = false;
+}
+
+function step() {
+  if (cursor >= messages.length) return;
+  processMessage(messages[cursor]);
+  cursor++;
+  renderStream();
+  renderSurface();
+  updateState();
+  if (cursor >= messages.length) {
+    document.getElementById('step-btn').disabled = true;
+    stopPlay();
+  }
+}
+
+function play() {
+  if (cursor >= messages.length) return;
+  const delay = parseInt(document.getElementById('speed-select').value, 10);
+  const btn = document.getElementById('play-btn');
+  btn.textContent = '⏸ Pause';
+  playInterval = setInterval(() => {
+    if (cursor >= messages.length) { stopPlay(); return; }
+    step();
+  }, delay);
+}
+
+function stopPlay() {
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+  }
+  document.getElementById('play-btn').textContent = '▶ Play';
+}
+
+// ---------- Wire up controls ----------------------------------------------
+
+document.getElementById('example-select').addEventListener('change', (e) => {
+  loadExample(e.target.value);
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+  loadExample(document.getElementById('example-select').value);
+});
+document.getElementById('step-btn').addEventListener('click', step);
+document.getElementById('play-btn').addEventListener('click', () => {
+  if (playInterval) stopPlay();
+  else play();
+});
+
+// Boot
+loadExample('hello');
+</script>
+</body>
+</html>
