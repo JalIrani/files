@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>A2UI · Live Stream Demo (SSE)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --panel: #15151a;
+    --panel-2: #1c1c22;
+    --border: #2a2a33;
+    --text: #e6e6ea;
+    --muted: #71717a;
+    --dim: #4a4a55;
+    --accent: #06b6d4;
+    --accent-dim: rgba(6, 182, 212, 0.12);
+    --accent-soft: rgba(6, 182, 212, 0.4);
+    --warn: #f59e0b;
+    --good: #10b981;
+    --red: #ef4444;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Geist', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; overflow: hidden; }
+
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+  }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand .ver {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px;
+  }
+  .brand .sub { color: var(--muted); font-size: 13px; }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  .controls select, .controls button {
+    font-family: var(--sans); font-size: 13px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); padding: 7px 14px; border-radius: 6px;
+    cursor: pointer; transition: all 120ms ease;
+  }
+  .controls button:hover { border-color: var(--accent-soft); color: var(--accent); }
+  .controls button.primary {
+    background: var(--accent); color: #001017; border-color: var(--accent); font-weight: 600;
+  }
+  .controls button.primary:hover { background: #0891b2; color: white; }
+
+  .conn {
+    font-family: var(--mono); font-size: 11px;
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+  }
+  .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .conn.connected .dot { background: var(--good); box-shadow: 0 0 8px var(--good); animation: pulse 1.6s ease-in-out infinite; }
+  .conn.streaming .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 0.8s ease-in-out infinite; }
+  .conn.disconnected .dot { background: var(--red); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+  .pane { display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+  .pane + .pane { border-left: 1px solid var(--border); }
+  .pane-header {
+    padding: 10px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; background: var(--panel);
+  }
+  .pane-header .label {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .pane-header .meta { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .pane-body { flex: 1; overflow: auto; padding: 16px 20px; }
+
+  .stream { display: flex; flex-direction: column; gap: 6px; }
+  .msg {
+    font-family: var(--mono); font-size: 12px; line-height: 1.55;
+    padding: 10px 14px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    white-space: pre-wrap; word-break: break-word;
+    animation: arrive 350ms ease-out;
+    position: relative;
+  }
+  @keyframes arrive {
+    from { opacity: 0; transform: translateX(-8px); border-color: var(--accent); background: var(--accent-dim); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .msg .num { color: var(--accent); font-weight: 700; margin-right: 12px; user-select: none; }
+  .msg .ts { color: var(--dim); font-size: 10px; margin-left: 8px; }
+  .msg .key { color: #c084fc; }
+  .msg .str { color: #86efac; }
+  .msg .num-val { color: #fcd34d; }
+  .msg .bool { color: #f97316; }
+
+  .surface {
+    background: white; color: #1a1a1a; border-radius: 8px; padding: 24px;
+    min-height: 200px; font-family: var(--sans); box-shadow: 0 0 0 1px var(--border);
+  }
+  .surface .placeholder { color: #94a3b8; text-align: center; padding: 40px 20px; font-style: italic; }
+
+  .a2ui-text { font-size: 15px; line-height: 1.5; }
+  .a2ui-text.h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .a2ui-text.h2 { font-size: 22px; font-weight: 700; }
+  .a2ui-text.h3 { font-size: 17px; font-weight: 600; }
+  .a2ui-text.body1 { font-size: 15px; }
+  .a2ui-text.body2 { font-size: 13px; color: #475569; }
+  .a2ui-column { display: flex; flex-direction: column; gap: 8px; }
+  .a2ui-column.start { align-items: flex-start; }
+  .a2ui-column.center { align-items: center; }
+  .a2ui-row { display: flex; flex-direction: row; gap: 12px; align-items: center; }
+  .a2ui-row.center { align-items: center; }
+  .a2ui-card {
+    border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; background: #fafbfc;
+  }
+  .a2ui-image {
+    border-radius: 50%; width: 56px; height: 56px; object-fit: cover; background: #e2e8f0;
+  }
+  .a2ui-button {
+    background: #0f172a; color: white; border: none; padding: 8px 16px;
+    border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  .a2ui-unknown { border: 1px dashed #cbd5e1; color: #94a3b8; padding: 8px; font-family: var(--mono); font-size: 12px; }
+
+  .state-panel { margin-top: 16px; border-top: 1px dashed var(--border); padding-top: 16px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .state-panel .section { margin-bottom: 10px; }
+  .state-panel .section-title { color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; font-size: 10px; }
+  .state-panel pre { margin: 0; color: var(--text); white-space: pre-wrap; line-height: 1.5; }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 8px 24px;
+    display: flex; gap: 24px; align-items: center;
+    font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--panel);
+  }
+  footer .stat .v { color: var(--text); font-weight: 500; }
+  footer .stat .v.ready { color: var(--good); }
+  footer .stat .v.waiting { color: var(--warn); }
+  footer .spacer { flex: 1; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <h1>A2UI</h1>
+      <span class="ver">v0.8 · live SSE stream</span>
+      <span class="sub">messages stream from <code style="font-family:var(--mono);font-size:12px;color:var(--accent)">/stream</code> via Server-Sent Events</span>
+    </div>
+    <div class="controls">
+      <span class="conn disconnected" id="conn"><span class="dot"></span><span id="conn-text">disconnected</span></span>
+      <select id="example-select">
+        <option value="hello">Hello World</option>
+        <option value="profile">Profile Card</option>
+        <option value="streaming">Live Data Binding</option>
+      </select>
+      <button id="connect-btn" class="primary">Connect ▶</button>
+      <button id="disconnect-btn" disabled>Stop</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="pane">
+      <div class="pane-header">
+        <span class="label">Incoming SSE Messages</span>
+        <span class="meta" id="stream-meta">0 received</span>
+      </div>
+      <div class="pane-body">
+        <div class="stream" id="stream">
+          <div style="color:var(--muted);font-style:italic;text-align:center;padding:40px;">
+            Click <strong style="color:var(--accent)">Connect</strong> to open the SSE stream.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane">
+      <div class="pane-header">
+        <span class="label">Rendered Surface</span>
+        <span class="meta" id="render-meta">not ready</span>
+      </div>
+      <div class="pane-body">
+        <div class="surface" id="surface">
+          <div class="placeholder">Waiting for beginRendering signal…</div>
+        </div>
+        <div class="state-panel">
+          <div class="section">
+            <div class="section-title">Component Buffer</div>
+            <pre id="buffer-display">{}</pre>
+          </div>
+          <div class="section">
+            <div class="section-title">Data Model</div>
+            <pre id="data-display">{}</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="stat">buffered: <span class="v" id="stat-buffered">0</span></span>
+    <span class="stat">data keys: <span class="v" id="stat-data">0</span></span>
+    <span class="stat">render state: <span class="v waiting" id="stat-ready">waiting</span></span>
+    <span class="stat">root: <span class="v" id="stat-root">—</span></span>
+    <span class="spacer"></span>
+    <span>spec: <a href="https://a2ui.org/specification/v0.8-a2ui/" target="_blank" style="color:var(--accent);text-decoration:none;">a2ui.org/specification/v0.8-a2ui</a></span>
+  </footer>
+
+</div>
+
+<script>
+/* ============================================================================
+ * A2UI minimal SSE client renderer
+ * Same renderer as standalone.html, but reads from a real EventSource stream
+ * served by server.py at /stream?example=NAME
+ * ============================================================================ */
+
+let componentBuffer = {};
+let dataModel = {};
+let isReady = false;
+let rootId = null;
+let messagesReceived = 0;
+let eventSource = null;
+
+// ---------- Data model + binding (identical to standalone) ----------------
+
+function extractValue(entry) {
+  if ('valueString'  in entry) return entry.valueString;
+  if ('valueNumber'  in entry) return entry.valueNumber;
+  if ('valueBoolean' in entry) return entry.valueBoolean;
+  if ('valueArray'   in entry) return entry.valueArray;
+  if ('valueMap'     in entry) {
+    const m = {};
+    for (const sub of entry.valueMap) m[sub.key] = extractValue(sub);
+    return m;
+  }
+  return null;
+}
+function ensurePath(root, parts) {
+  let cur = root;
+  for (const p of parts) {
+    if (cur[p] == null || typeof cur[p] !== 'object') cur[p] = {};
+    cur = cur[p];
+  }
+  return cur;
+}
+function applyDataModelUpdate(update) {
+  const parts = (update.path || '').split('/').filter(Boolean);
+  const target = ensurePath(dataModel, parts);
+  for (const entry of update.contents || []) {
+    target[entry.key] = extractValue(entry);
+  }
+}
+function resolvePath(path) {
+  if (!path) return undefined;
+  const parts = path.split('/').filter(Boolean);
+  let cur = dataModel;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+function setPathValue(path, value) {
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length === 0) return;
+  const last = parts.pop();
+  const target = ensurePath(dataModel, parts);
+  if (target[last] === undefined) target[last] = value;
+}
+function resolveBoundValue(bv) {
+  if (bv == null) return '';
+  if ('path' in bv && ('literalString' in bv || 'literalNumber' in bv || 'literalBoolean' in bv)) {
+    const lit = bv.literalString ?? bv.literalNumber ?? bv.literalBoolean;
+    setPathValue(bv.path, lit);
+    const v = resolvePath(bv.path);
+    return v ?? lit;
+  }
+  if ('path' in bv) return resolvePath(bv.path) ?? '';
+  if ('literalString'  in bv) return bv.literalString;
+  if ('literalNumber'  in bv) return bv.literalNumber;
+  if ('literalBoolean' in bv) return bv.literalBoolean;
+  return '';
+}
+
+function processMessage(msg) {
+  if (msg.surfaceUpdate) {
+    for (const c of msg.surfaceUpdate.components || []) {
+      componentBuffer[c.id] = c.component;
+    }
+  } else if (msg.dataModelUpdate) {
+    applyDataModelUpdate(msg.dataModelUpdate);
+  } else if (msg.beginRendering) {
+    rootId = msg.beginRendering.root;
+    isReady = true;
+  }
+}
+
+// ---------- Component renderers (same as standalone) ----------------------
+
+function renderComponent(id) {
+  const comp = componentBuffer[id];
+  if (!comp) return null;
+  const type = Object.keys(comp)[0];
+  const props = comp[type] || {};
+  switch (type) {
+    case 'Text':   return renderText(props);
+    case 'Column': return renderContainer(props, 'column');
+    case 'Row':    return renderContainer(props, 'row');
+    case 'Card':   return renderCard(props);
+    case 'Image':  return renderImage(props);
+    case 'Button': return renderButton(props);
+    default: {
+      const el = document.createElement('div');
+      el.className = 'a2ui-unknown';
+      el.textContent = `[unknown: ${type}]`;
+      return el;
+    }
+  }
+}
+function renderText(props) {
+  const el = document.createElement('div');
+  el.className = `a2ui-text ${props.usageHint || 'body1'}`;
+  el.textContent = String(resolveBoundValue(props.text) ?? '');
+  return el;
+}
+function renderContainer(props, kind) {
+  const el = document.createElement('div');
+  el.className = `a2ui-${kind} ${props.alignment || ''}`.trim();
+  const children = props.children || {};
+  if (children.explicitList) {
+    for (const id of children.explicitList) {
+      const c = renderComponent(id);
+      if (c) el.appendChild(c);
+    }
+  }
+  return el;
+}
+function renderCard(props) {
+  const el = document.createElement('div');
+  el.className = 'a2ui-card';
+  if (props.child) {
+    const c = renderComponent(props.child);
+    if (c) el.appendChild(c);
+  }
+  return el;
+}
+function renderImage(props) {
+  const el = document.createElement('img');
+  el.className = 'a2ui-image';
+  el.src = String(resolveBoundValue(props.url) ?? '');
+  el.alt = '';
+  return el;
+}
+function renderButton(props) {
+  const el = document.createElement('button');
+  el.className = 'a2ui-button';
+  if (props.child) el.appendChild(renderComponent(props.child));
+  else if (props.label) el.textContent = String(resolveBoundValue(props.label) ?? '');
+  return el;
+}
+
+// ---------- UI updates ----------------------------------------------------
+
+function syntaxHighlight(json) {
+  return json
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"\s*:)/g, '<span class="key">$1</span>')
+    .replace(/("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(?!\s*:))/g, '<span class="str">$1</span>')
+    .replace(/\b(true|false)\b/g, '<span class="bool">$1</span>')
+    .replace(/(?<![\w-])(-?\d+(?:\.\d+)?)/g, '<span class="num-val">$1</span>');
+}
+function appendStreamMessage(msg) {
+  const stream = document.getElementById('stream');
+  if (messagesReceived === 1) stream.innerHTML = ''; // clear placeholder
+  const div = document.createElement('div');
+  div.className = 'msg';
+  const ts = new Date().toLocaleTimeString([], { hour12: false });
+  div.innerHTML =
+    `<span class="num">${String(messagesReceived).padStart(2, '0')}</span>` +
+    syntaxHighlight(JSON.stringify(msg)) +
+    `<span class="ts">${ts}</span>`;
+  stream.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+function renderSurface() {
+  const surface = document.getElementById('surface');
+  if (!isReady || !rootId) {
+    surface.innerHTML = '<div class="placeholder">Waiting for beginRendering signal…</div>';
+    return;
+  }
+  const tree = renderComponent(rootId);
+  surface.innerHTML = '';
+  if (tree) surface.appendChild(tree);
+}
+function updateState() {
+  document.getElementById('buffer-display').textContent =
+    Object.keys(componentBuffer).length === 0 ? '{}' : JSON.stringify(componentBuffer, null, 2);
+  document.getElementById('data-display').textContent =
+    Object.keys(dataModel).length === 0 ? '{}' : JSON.stringify(dataModel, null, 2);
+  document.getElementById('stat-buffered').textContent = Object.keys(componentBuffer).length;
+  document.getElementById('stat-data').textContent = Object.keys(dataModel).length;
+  const ready = document.getElementById('stat-ready');
+  ready.textContent = isReady ? 'rendering' : 'waiting';
+  ready.className = 'v ' + (isReady ? 'ready' : 'waiting');
+  document.getElementById('stat-root').textContent = rootId || '—';
+  document.getElementById('stream-meta').textContent = `${messagesReceived} received`;
+  document.getElementById('render-meta').textContent =
+    isReady ? 'rendered' : 'waiting for beginRendering';
+}
+
+// ---------- Connection control --------------------------------------------
+
+function setConnState(state, text) {
+  const el = document.getElementById('conn');
+  el.className = `conn ${state}`;
+  document.getElementById('conn-text').textContent = text;
+}
+
+function reset() {
+  componentBuffer = {};
+  dataModel = {};
+  isReady = false;
+  rootId = null;
+  messagesReceived = 0;
+  document.getElementById('stream').innerHTML =
+    '<div style="color:var(--muted);font-style:italic;text-align:center;padding:40px;">Click <strong style="color:var(--accent)">Connect</strong> to open the SSE stream.</div>';
+  renderSurface();
+  updateState();
+}
+
+function connect() {
+  const example = document.getElementById('example-select').value;
+  reset();
+  setConnState('connected', `connecting to /stream?example=${example}…`);
+  document.getElementById('connect-btn').disabled = true;
+  document.getElementById('disconnect-btn').disabled = false;
+
+  eventSource = new EventSource(`/stream?example=${encodeURIComponent(example)}`);
+
+  eventSource.onopen = () => {
+    setConnState('streaming', `streaming · /stream?example=${example}`);
+  };
+  eventSource.onmessage = (evt) => {
+    let msg;
+    try { msg = JSON.parse(evt.data); }
+    catch { console.warn('non-JSON SSE data:', evt.data); return; }
+    messagesReceived++;
+    processMessage(msg);
+    appendStreamMessage(msg);
+    renderSurface();
+    updateState();
+  };
+  eventSource.onerror = () => {
+    // EventSource fires error on normal stream close (server finishes sending).
+    setConnState('disconnected', 'stream closed');
+    eventSource.close();
+    document.getElementById('connect-btn').disabled = false;
+    document.getElementById('disconnect-btn').disabled = true;
+  };
+}
+
+function disconnect() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  setConnState('disconnected', 'disconnected');
+  document.getElementById('connect-btn').disabled = false;
+  document.getElementById('disconnect-btn').disabled = true;
+}
+
+// ---------- Wire up -------------------------------------------------------
+
+document.getElementById('connect-btn').addEventListener('click', connect);
+document.getElementById('disconnect-btn').addEventListener('click', disconnect);
+
+// Allow ?example=NAME in the URL to pre-select
+const params = new URLSearchParams(window.location.search);
+if (params.get('example')) {
+  const sel = document.getElementById('example-select');
+  if ([...sel.options].some(o => o.value === params.get('example'))) {
+    sel.value = params.get('example');
+  }
+}
+</script>
+</body>
+</html>
